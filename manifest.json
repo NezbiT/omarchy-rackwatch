@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "nezbit.rackwatch",
+  "name": "RackWatch",
+  "version": "1.1.0",
+  "author": "NezbiT",
+  "license": "MIT",
+  "description": "Homelab & Docker container control panel for Omarchy. Monitor host CPU, RAM, Disk, ZFS pools, restart containers, and acknowledge alerts directly from the status bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "RackWatch",
+    "description": "Homelab metrics, container controls, and alert status from RackWatch.",
+    "category": "System",
+    "aliases": [
+      "rackwatch",
+      "homelab",
+      "servers",
+      "docker-ctl"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "url": "http://127.0.0.1:8080",
+      "token": "",
+      "refreshIntervalSec": 5
+    },
+    "schema": [
+      {
+        "key": "url",
+        "type": "string",
+        "label": "RackWatch Server URL",
+        "defaultValue": "http://127.0.0.1:8080"
+      },
+      {
+        "key": "token",
+        "type": "string",
+        "label": "API Token (X-API-Key)",
+        "defaultValue": "",
+        "description": "Optional. For non-loopback servers, RackWatch requires HTTPS before sending this token."
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 2,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      }
+    ]
+  }
+}
