@@ -42,6 +42,10 @@ case "$URL" in
 esac
 [[ "$URL" != *$'\n'* && "$URL" != *$'\r'* && "$URL" != *' '* ]] \
   || fail "Invalid RackWatch URL" "Whitespace is not allowed" 2
+[[ "$URL" != *'?"* && "$URL" != *'#'* ]] \
+  || fail "Invalid RackWatch URL" "Query strings and fragments are not allowed" 2
+[[ "$URL" =~ ^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(:[0-9]+)?(/[^?#]*)?$ ]] \
+  || fail "Invalid RackWatch URL" "Use a base URL like http://host:8080 or https://host/rackwatch" 2
 
 if [[ "$ACTION" != "open-url" ]]; then
   # Quickshell writes the token through stdin so it never appears in argv.
@@ -151,3 +155,4 @@ case "$ACTION" in
     fail "Unknown action" "$ACTION" 2
     ;;
 esac
+
