@@ -20,6 +20,8 @@ check_failure() {
 
 bash -n "$COLLECTOR" || failures=$((failures + 1))
 check_failure 'rejects unsupported URL schemes' snapshot 'file:///etc/passwd'
+check_failure 'rejects URL query strings' snapshot 'https://example.com/rackwatch?debug=1'
+check_failure 'rejects URL fragments' snapshot 'https://example.com/rackwatch#top'
 check_failure 'rejects invalid container names' restart-container 'http://127.0.0.1:9' '../bad'
 check_failure 'unknown actions return valid JSON' invalid-action 'http://127.0.0.1:9'
 check_failure 'network failures are not reported as success' restart-container 'http://127.0.0.1:9' demo

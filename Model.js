@@ -6,11 +6,16 @@ function parseCollector(raw) {
   }
   try {
     var parsed = JSON.parse(raw.trim())
-    if (!parsed) return { ok: false, error: "Null JSON" }
-    if (parsed.ok === false) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, error: "Invalid collector payload" }
+    }
+    if (parsed.ok !== true) {
       var message = parsed.error || "Unreachable"
       if (parsed.detail) message += ": " + parsed.detail
       return { ok: false, error: message }
+    }
+    if (!parsed.data || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
+      return { ok: false, error: "Missing snapshot data" }
     }
     var snap = parsed.data || {}
     return {
