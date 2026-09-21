@@ -24,11 +24,13 @@ If you do not have RackWatch installed yet, set up the Docker Compose stack firs
 ## Features
 
 ### Status Bar Widget
+
 - **Healthy / Normal:** Rack server icon + live host CPU usage (e.g., `RW · 18% CPU`).
 - **Alert / Container Down:** High-contrast red warning icon with badge counter (e.g., `󰅚 1 down`).
 - **Offline / Unreachable:** Distinguishable disconnected state (e.g., `RW · offline`).
 
 ### Dropdown Operations Panel
+
 - **Service Health Badges:** Real-time connectivity indicators for Prometheus, Docker, Home Assistant, and MQTT.
 - **Host Performance Gauges:** Visual percentage bars for CPU, RAM, Disk, System Load, and ZFS pool health (`ONLINE`, `DEGRADED`).
 - **Container Management:** Lists container names, images, memory usage, and health states (`healthy`, `running`, `exited`).
@@ -97,7 +99,9 @@ Configuration is stored in `~/.config/omarchy/shell.json`:
 }
 ```
 
-You can update settings via the command line:
+If RackWatch authentication is enabled, configure the same token used by `RACKWATCH_API_TOKEN` on the server. The plugin authenticates with `X-API-Key`; a browser login does not authenticate API mutations.
+
+You can update non-secret settings via the command line:
 
 ```bash
 # Set RackWatch instance URL
@@ -117,9 +121,12 @@ omarchy bar set nezbit.rackwatch refreshIntervalSec 5 --json
 ## Security & Privacy
 
 - **Safe Credential Handling:** API tokens configured in `shell.json` are passed to `collector.sh` via standard input (`stdin`), preventing credentials from appearing in process listings (`ps`).
-- **Restricted Temp Files:** Dynamic curl configuration files are written with `600` permissions and automatically deleted upon exit via POSIX traps (`EXIT HUP INT TERM`).
-- **Transport Security:** Tokens are rejected over unencrypted HTTP unless connecting to loopback (`localhost`, `127.0.0.1`, `::1`). For remote servers, use HTTPS.
+- **Restricted Temp Files:** Dynamic curl header files are written with `600` permissions and automatically deleted on exit.
+- **Transport Security:** Tokens are rejected over unencrypted HTTP unless connecting to loopback (`localhost`, `127.0.0.1`, `::1`). Loopback URLs may include a port and base path.
+- **Strict Base URLs:** Query strings, fragments, credentials in URLs, and unsupported schemes are rejected.
 - **No Third-Party Telemetry:** The plugin communicates solely with your configured RackWatch endpoint.
+
+For remote servers that require a token, use HTTPS. Do not publish a Docker-controlling RackWatch API directly to the Internet.
 
 ---
 
@@ -141,39 +148,41 @@ omarchy bar set nezbit.rackwatch refreshIntervalSec 5 --json
 ### Widget Displays "Offline"
 
 1. Verify that RackWatch is responding on the configured endpoint:
+
    ```bash
    curl -fsS http://127.0.0.1:8080/healthz
    ```
+
 2. Confirm the published port (`8080` default, `8180` on CasaOS).
 3. If the server requires authentication and returns `401 Unauthorized`, configure `token` in `shell.json`.
-4. Inspect recent desktop logs:
+4. Use HTTPS if a remote server requires a token.
+5. Inspect recent desktop logs:
+
    ```bash
    journalctl --user --since today --no-pager | grep -i rackwatch
    ```
 
 ### Action Fails with Error
 
-When an action (such as container restart) fails, the dropdown panel displays the exact error returned by RackWatch. Common causes include:
+The panel displays the error returned by RackWatch. Common causes include:
+
 - Container is on the protected denylist.
-- API token lacks permission or is invalid.
-- Container name is not recognized or not in allowlist.
+- API token is missing or invalid.
+- Container name is not recognized or not in the allowlist.
+- Docker is unavailable on the RackWatch server.
 
 ---
 
 ## Development & Testing
 
-Run tests and validation scripts:
-
 ```bash
-# Validate Omarchy plugin manifest and structure
 omarchy plugin validate ~/.config/omarchy/plugins/nezbit.rackwatch
-
-# Check shell syntax
-bash -n ~/.config/omarchy/plugins/nezbit.rackwatch/collector.sh
-
-# Run collector test suite
-~/.config/omarchy/plugins/nezbit.rackwatch/tests/test-collector.sh
+bash -n collector.sh tests/test-collector.sh
+./tests/test-collector.sh
+node tests/test-model.js
 ```
+
+GitHub Actions performs the same validation on pushes and pull requests.
 
 ---
 

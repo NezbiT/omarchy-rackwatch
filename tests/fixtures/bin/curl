@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+OUTPUT=""
+AUTH_FILE=""
+
+while (($#)); do
+  case "$1" in
+    --output)
+      OUTPUT="$2"
+      shift 2
+      ;;
+    --header)
+      [[ "$2" == @* ]] && AUTH_FILE="${2#@}"
+      shift 2
+      ;;
+    --connect-timeout|--max-time|--proto|--max-filesize|--request|--write-out|--url|--data)
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+[[ -n "$OUTPUT" ]] || exit 64
+if [[ -n "${EXPECT_TOKEN:-}" ]]; then
+  [[ -n "$AUTH_FILE" && -r "$AUTH_FILE" ]] || exit 65
+  [[ "$(<"$AUTH_FILE")" == "X-API-Key: $EXPECT_TOKEN" ]] || exit 66
+fi
+
+printf '%s\n' '{"ts":1,"instance":"test","summary":{},"hosts":[],"containers":[],"zfs":[],"alerts":[]}' >"$OUTPUT"
+printf '200'
