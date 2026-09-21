@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "nezbit.rackwatch",
   "name": "RackWatch",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "NezbiT",
   "license": "MIT",
   "description": "Homelab & Docker container control panel for Omarchy. Monitor host CPU, RAM, Disk, ZFS pools, restart containers, and acknowledge alerts directly from the status bar.",
