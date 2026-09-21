@@ -36,16 +36,34 @@ command -v jq >/dev/null 2>&1 || {
 }
 
 URL="${URL%/}"
-case "$URL" in
-  http://*|https://*) ;;
-  *) fail "Invalid RackWatch URL" "Only http:// and https:// URLs are allowed" 2 ;;
-esac
-[[ "$URL" != *$'\n'* && "$URL" != *$'\r'* && "$URL" != *' '* ]] \
-  || fail "Invalid RackWatch URL" "Whitespace is not allowed" 2
-[[ "$URL" != *'?'* && "$URL" != *'#'* ]] \
-  || fail "Invalid RackWatch URL" "Query strings and fragments are not allowed" 2
-[[ "$URL" =~ ^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(:[0-9]+)?(/[^?#]*)?$ ]] \
-  || fail "Invalid RackWatch URL" "Use a base URL like http://host:8080 or https://host/rackwatch" 2
+validate_url() {
+  local url="$1" remainder authority host port=""
+  case "$url" in
+    http://*) remainder="${url#http://}" ;;
+    https://*) remainder="${url#https://}" ;;
+    *) return 1 ;;
+  esac
+  [[ -n "$remainder" && ! "$url" =~ [[:cntrl:][:space:]] ]] || return 1
+  [[ "$url" != *'?'* && "$url" != *'#'* && "$url" != *'\'* ]] || return 1
+
+  authority="${remainder%%/*}"
+  [[ -n "$authority" && "$authority" != *'@'* ]] || return 1
+  if [[ "$authority" =~ ^\[([0-9A-Fa-f:.]+)\](:([0-9]+))?$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[3]:-}"
+    [[ "$host" == *:* ]] || return 1
+  elif [[ "$authority" =~ ^([A-Za-z0-9_][A-Za-z0-9_.-]*)(:([0-9]+))?$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[3]:-}"
+    [[ "$host" != "." && "$host" != ".." ]] || return 1
+  else
+    return 1
+  fi
+  [[ -z "$port" ]] || { [[ ${#port} -le 5 ]] && (( 10#$port >= 1 && 10#$port <= 65535 )); }
+}
+
+validate_url "$URL" \
+  || fail "Invalid RackWatch URL" "Use http(s), a valid local/DNS host or bracketed IPv6, and an optional port from 1 to 65535" 2
 
 if [[ "$ACTION" != "open-url" ]]; then
   # Quickshell writes the token through stdin so it never appears in argv.

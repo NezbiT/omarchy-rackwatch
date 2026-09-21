@@ -6,7 +6,7 @@ Widget de la barra de Omarchy para consultar el estado de un homelab RackWatch y
 
 ## Relación con RackWatch
 
-Este plugin es el **cliente de escritorio para la barra de estado de Omarchy** y **requiere tener instalado y en ejecución [RackWatch](https://github.com/NezbiT/rackwatch)** en tu servidor local o remoto.
+Este plugin es el **cliente de escritorio para la barra de estado de Omarchy** y necesita una instancia activa de [RackWatch](https://github.com/NezbiT/rackwatch). El asistente incluido puede conectarla o instalarla localmente con Docker.
 
 El plugin no interactúa directamente con el demonio de Docker ni almacena métricas por sí mismo; se comunica de forma periódica con la API REST (`/api/v1`) de tu instancia de RackWatch.
 
@@ -38,37 +38,57 @@ Panel.qml → Service.qml → collector.sh → API /api/v1 de RackWatch
 
 El plugin consulta periódicamente `GET /api/v1/snapshot`. Las acciones utilizan los endpoints de reinicio de contenedores y confirmación de alertas. No accede directamente al socket de Docker.
 
-## Requisitos
+## Instalación rápida
 
-1. **Servidor RackWatch en ejecución:** Una instancia activa y accesible.
-2. **Entorno de escritorio:** Omarchy 4.x con Omarchy Shell/Quickshell.
-3. **Herramientas del sistema:** `bash`, `curl`, `jq` y `xdg-open` (`xdg-utils`).
+### Opción recomendada: asistente interactivo
 
-Comprueba las dependencias con:
+Copia y pega esta única orden:
 
 ```bash
-command -v bash curl jq xdg-open
+omarchy plugin add https://github.com/NezbiT/omarchy-rackwatch.git --enable && \
+~/.config/omarchy/plugins/nezbit.rackwatch/setup-rackwatch
 ```
 
-## Instalación y activación
+El asistente ofrece dos caminos:
 
-Con el administrador de plugins:
+1. **Conectar CasaOS u otro servidor existente.** Solicita la URL y el token de forma oculta, valida `/api/v1/snapshot` y solo entonces guarda la configuración.
+2. **Instalar RackWatch localmente.** Comprueba Docker, clona RackWatch en `~/.local/share/rackwatch`, genera secretos aleatorios, levanta Docker Compose, espera el `healthcheck` y conecta el widget.
+
+El token nunca se imprime ni se pasa como argumento de proceso. Si la validación falla, `shell.json` no se modifica.
+
+### Instalación local casi automática
+
+Para instalar el plugin y el servidor RackWatch local con una sola orden no interactiva:
+
+```bash
+omarchy plugin add https://github.com/NezbiT/omarchy-rackwatch.git --enable --yes && \
+~/.config/omarchy/plugins/nezbit.rackwatch/setup-rackwatch --install-local --yes
+```
+
+Esto requiere `git`, Docker con Compose v2, `openssl`, `curl` y `jq`. No reemplaza un directorio ajeno ni una copia de RackWatch con cambios sin guardar.
+
+### Conectar CasaOS
+
+Si RackWatch ya está en CasaOS:
+
+```bash
+~/.config/omarchy/plugins/nezbit.rackwatch/setup-rackwatch \
+  --connect http://IP-DE-CASAOS:8180
+```
+
+El asistente solicita el token sin mostrarlo. Por seguridad, un token no puede enviarse a una dirección remota por HTTP: usa HTTPS, una VPN/túnel con terminación local o deja el servidor sin token únicamente dentro de una red local confiable. El asistente no inicia sesión por SSH ni cambia contenedores remotos.
+
+### Instalación manual
 
 ```bash
 omarchy plugin add https://github.com/NezbiT/omarchy-rackwatch.git --enable
+omarchy plugin validate ~/.config/omarchy/plugins/nezbit.rackwatch
 ```
 
-O instala manualmente en:
-
-```text
-~/.config/omarchy/plugins/nezbit.rackwatch/
-```
-
-Valida y activa el widget:
+Dependencias mínimas del widget: Omarchy 4.x, `bash`, `curl`, `jq` y `xdg-open`. Compruébalas con:
 
 ```bash
-omarchy plugin validate ~/.config/omarchy/plugins/nezbit.rackwatch
-omarchy plugin enable nezbit.rackwatch right
+command -v bash curl jq xdg-open
 ```
 
 Los cambios se recargan automáticamente. Si fuese necesario:
@@ -76,6 +96,34 @@ Los cambios se recargan automáticamente. Si fuese necesario:
 ```bash
 omarchy-shell shell rescanPlugins
 ```
+
+### Actualización
+
+Actualiza el plugin y, si usas la instalación Docker local administrada por el asistente, actualiza también RackWatch:
+
+```bash
+omarchy plugin update nezbit.rackwatch --yes && \
+~/.config/omarchy/plugins/nezbit.rackwatch/setup-rackwatch --install-local --yes
+```
+
+El asistente usa `git pull --ff-only`; se detiene si detecta cambios locales y conserva `.env`, los secretos y los volúmenes Docker existentes.
+
+### Desinstalación
+
+Quita el widget de Omarchy con:
+
+```bash
+omarchy plugin remove nezbit.rackwatch --yes
+```
+
+Esto no detiene ni elimina el servidor RackWatch, su `.env`, base de datos o volúmenes Docker. Si instalaste el servidor local con el asistente y también quieres detenerlo sin borrar datos:
+
+```bash
+docker compose --file ~/.local/share/rackwatch/docker-compose.yml \
+  --project-directory ~/.local/share/rackwatch down
+```
+
+No añadas `--volumes` salvo que quieras borrar permanentemente los datos administrados por Docker.
 
 ## Configuración
 
@@ -114,7 +162,7 @@ Usa el puerto publicado por el servidor, no el puerto interno del contenedor.
 - El plugin entrega el token al colector por entrada estándar, nunca como argumento de proceso.
 - `curl` lo lee desde un archivo temporal con permisos `600`, eliminado al terminar.
 - Un token solo se envía por HTTPS o a loopback (`localhost`, `127.0.0.1`, `::1`). Una URL loopback puede incluir puerto y ruta base.
-- Se rechazan query strings, fragmentos, credenciales dentro de URLs y esquemas distintos de HTTP/HTTPS.
+- Se rechazan query strings, fragmentos, credenciales dentro de URLs, puertos inválidos y esquemas distintos de HTTP/HTTPS. Se aceptan aliases locales con `_` y FQDN absolutos terminados en `.`.
 - No publiques RackWatch directamente en Internet. Prefiere HTTPS detrás de un proxy autenticado, VPN o túnel seguro.
 - RackWatch puede controlar Docker. Mantén su denylist/allowlist y protege el API con token.
 - El plugin no incorpora telemetría ni envía información a terceros.
@@ -159,8 +207,9 @@ El panel muestra el error devuelto por RackWatch. Las causas comunes son token i
 
 ```bash
 omarchy plugin validate ~/.config/omarchy/plugins/nezbit.rackwatch
-bash -n collector.sh tests/test-collector.sh
+bash -n collector.sh setup-rackwatch tests/test-collector.sh tests/test-setup.sh
 ./tests/test-collector.sh
+./tests/test-setup.sh
 node tests/test-model.js
 ```
 
