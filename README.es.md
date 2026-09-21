@@ -1,3 +1,10 @@
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/NezbiT/omarchy-rackwatch@v1.1.0/assets/rackwatch.svg" width="80" height="80" alt="RackWatch para Omarchy"><br>
+  <a href="https://www.jsdelivr.com/package/gh/NezbiT/omarchy-rackwatch"><img src="https://data.jsdelivr.com/v1/package/gh/NezbiT/omarchy-rackwatch/badge" alt="jsDelivr"></a>
+  <a href="https://github.com/NezbiT/omarchy-rackwatch/releases/latest"><img src="https://img.shields.io/github/v/release/NezbiT/omarchy-rackwatch?color=blue" alt="Última versión"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-green.svg" alt="Licencia"></a>
+</p>
+
 # RackWatch para Omarchy (`nezbit.rackwatch`)
 
 Widget de la barra de Omarchy para consultar el estado de un homelab RackWatch y realizar operaciones básicas sin abrir el panel web.
@@ -218,6 +225,23 @@ GitHub Actions ejecuta estas validaciones en pushes y pull requests.
 ## Privacidad
 
 Los archivos distribuidos no contienen correos, nombres reales, tokens ni rutas personales. La única identidad pública dentro de los archivos es `NezbiT`.
+
+---
+
+## Iconos y recursos CDN (jsDelivr)
+
+Los iconos vectoriales del plugin están disponibles y cacheados globalmente a través de [jsDelivr](https://www.jsdelivr.com/package/gh/NezbiT/omarchy-rackwatch):
+
+- **Icono normal (barra de estado):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/omarchy-rackwatch@v1.1.0/assets/rackwatch.svg
+  ```
+- **Icono de alerta (barra de estado):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/omarchy-rackwatch@v1.1.0/assets/rackwatch-alert.svg
+  ```
+
+---
 
 ## Licencia
 

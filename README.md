@@ -1,3 +1,10 @@
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/NezbiT/omarchy-rackwatch@v1.1.0/assets/rackwatch.svg" width="80" height="80" alt="RackWatch for Omarchy Logo"><br>
+  <a href="https://www.jsdelivr.com/package/gh/NezbiT/omarchy-rackwatch"><img src="https://data.jsdelivr.com/v1/package/gh/NezbiT/omarchy-rackwatch/badge" alt="jsDelivr"></a>
+  <a href="https://github.com/NezbiT/omarchy-rackwatch/releases/latest"><img src="https://img.shields.io/github/v/release/NezbiT/omarchy-rackwatch?color=blue" alt="Latest Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+</p>
+
 # RackWatch for Omarchy (`nezbit.rackwatch`)
 
 Status bar widget and dropdown control panel for **Omarchy**, designed to monitor and manage a [RackWatch](https://github.com/NezbiT/rackwatch) homelab instance without opening the browser.
@@ -225,6 +232,21 @@ node tests/test-model.js
 ```
 
 GitHub Actions performs the same validation on pushes and pull requests.
+
+---
+
+## CDN Assets & Icons (jsDelivr)
+
+Icons and vector assets are published and globally cached via [jsDelivr](https://www.jsdelivr.com/package/gh/NezbiT/omarchy-rackwatch):
+
+- **Status Bar Icon (Normal):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/omarchy-rackwatch@v1.1.0/assets/rackwatch.svg
+  ```
+- **Status Bar Icon (Alert):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/omarchy-rackwatch@v1.1.0/assets/rackwatch-alert.svg
+  ```
 
 ---
 
