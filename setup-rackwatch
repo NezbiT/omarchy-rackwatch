@@ -1,0 +1,383 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLUGIN_ID="nezbit.rackwatch"
+RACKWATCH_REPOSITORY="https://github.com/NezbiT/rackwatch.git"
+DEFAULT_URL="http://127.0.0.1:8080"
+INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/rackwatch"
+SHELL_CONFIG="${RACKWATCH_SHELL_CONFIG:-$HOME/.config/omarchy/shell.json}"
+COLLECTOR="${RACKWATCH_COLLECTOR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/collector.sh}"
+ASSUME_YES=0
+MODE=""
+CONNECT_URL=""
+TOKEN_FROM_STDIN=0
+TOKEN=""
+TEMP_FILES=()
+
+cleanup() {
+  local path
+  for path in "${TEMP_FILES[@]}"; do
+    [[ -n "$path" ]] && rm -f -- "$path"
+  done
+}
+
+die() {
+  printf 'RackWatch setup: %s\n' "$*" >&2
+  exit 1
+}
+
+info() {
+  printf '%s\n' "$*"
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  setup-rackwatch                         Interactive setup
+  setup-rackwatch --connect URL           Connect an existing RackWatch server
+  setup-rackwatch --install-local         Install RackWatch locally with Docker
+
+Options:
+  --token-stdin       Read the API token from standard input instead of prompting
+  --install-dir PATH  Local RackWatch checkout (default: ~/.local/share/rackwatch)
+  --yes               Accept the local Docker installation confirmation
+  -h, --help          Show this help
+
+Tokens are never passed as command-line arguments or printed.
+EOF
+}
+
+need_command() {
+  command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1"
+}
+
+normalize_url() {
+  local url="$1"
+  while [[ "$url" == */ ]]; do url="${url%/}"; done
+  printf '%s' "$url"
+}
+
+validate_url() {
+  local url remainder authority host port=""
+  url=$(normalize_url "$1")
+  case "$url" in
+    http://*) remainder="${url#http://}" ;;
+    https://*) remainder="${url#https://}" ;;
+    *) return 1 ;;
+  esac
+  [[ -n "$remainder" && ! "$url" =~ [[:cntrl:][:space:]] ]] || return 1
+  [[ "$url" != *'?'* && "$url" != *'#'* && "$url" != *'\'* ]] || return 1
+
+  authority="${remainder%%/*}"
+  [[ -n "$authority" && "$authority" != *'@'* ]] || return 1
+  if [[ "$authority" =~ ^\[([0-9A-Fa-f:.]+)\](:([0-9]+))?$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[3]:-}"
+    [[ "$host" == *:* ]] || return 1
+  elif [[ "$authority" =~ ^([A-Za-z0-9_][A-Za-z0-9_.-]*)(:([0-9]+))?$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[3]:-}"
+    [[ "$host" != "." && "$host" != ".." ]] || return 1
+  else
+    return 1
+  fi
+  [[ -z "$port" ]] || { [[ ${#port} -le 5 ]] && (( 10#$port >= 1 && 10#$port <= 65535 )); }
+}
+
+token_transport_allowed() {
+  local url="$1" token="$2" authority
+  [[ -z "$token" || "$url" == https://* ]] && return 0
+  [[ "$url" == http://* ]] || return 1
+  authority="${url#http://}"
+  authority="${authority%%/*}"
+  case "${authority,,}" in
+    127.0.0.1|127.0.0.1:*|localhost|localhost:*|\[::1\]|\[::1\]:*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+random_hex() {
+  need_command openssl
+  openssl rand -hex 32
+}
+
+make_runtime_temp() {
+  local name="$1"
+  if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+    mktemp "$XDG_RUNTIME_DIR/$name.XXXXXX" 2>/dev/null && return 0
+  fi
+  mktemp "/tmp/$name.XXXXXX" 2>/dev/null
+}
+
+read_token() {
+  if (( TOKEN_FROM_STDIN )); then
+    IFS= read -r TOKEN || TOKEN=""
+  elif [[ -t 0 ]]; then
+    read -r -s -p "API token (Enter if RackWatch has no token): " TOKEN
+    printf '\n'
+  else
+    TOKEN=""
+  fi
+  [[ "$TOKEN" != *$'\n'* && "$TOKEN" != *$'\r'* ]] || die "the API token cannot contain newlines"
+}
+
+confirm_local_install() {
+  (( ASSUME_YES )) && return 0
+  [[ -t 0 ]] || die "local installation needs confirmation; rerun with --yes"
+  printf 'Install/update the RackWatch Docker stack in %s? [y/N] ' "$INSTALL_DIR"
+  local answer
+  IFS= read -r answer
+  [[ "${answer,,}" == y || "${answer,,}" == yes ]]
+}
+
+set_env_value() {
+  local file="$1" key="$2" value="$3" tmp
+  [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || die "invalid value for $key"
+  tmp=$(mktemp "${file}.tmp.XXXXXX") || die "cannot create temporary environment file"
+  TEMP_FILES+=("$tmp")
+  awk -v key="$key" -v value="$value" '
+    BEGIN { found = 0 }
+    $0 ~ "^" key "=" { print key "=" value; found = 1; next }
+    { print }
+    END { if (!found) print key "=" value }
+  ' "$file" >"$tmp"
+  chmod 600 "$tmp"
+  mv -- "$tmp" "$file"
+}
+
+read_env_value() {
+  local file="$1" key="$2"
+  sed -n "s/^${key}=//p" "$file" | head -n 1
+}
+
+prepare_local_checkout() {
+  need_command git
+  if [[ ! -e "$INSTALL_DIR" ]]; then
+    mkdir -p -- "$(dirname -- "$INSTALL_DIR")"
+    git clone --depth 1 -- "$RACKWATCH_REPOSITORY" "$INSTALL_DIR"
+    return
+  fi
+
+  [[ -d "$INSTALL_DIR/.git" ]] || die "$INSTALL_DIR exists but is not a Git checkout"
+  local origin
+  origin=$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)
+  [[ "$origin" == "$RACKWATCH_REPOSITORY" || "$origin" == "${RACKWATCH_REPOSITORY%.git}" ]] \
+    || die "$INSTALL_DIR belongs to a different repository"
+  [[ -z "$(git -C "$INSTALL_DIR" status --porcelain)" ]] \
+    || die "$INSTALL_DIR has local changes; refusing to overwrite them"
+  git -C "$INSTALL_DIR" pull --ff-only
+}
+
+prepare_local_env() {
+  local env_file="$INSTALL_DIR/.env" secret token
+  if [[ ! -f "$env_file" ]]; then
+    cp -- "$INSTALL_DIR/.env.example" "$env_file"
+    chmod 600 "$env_file"
+  fi
+
+  secret=$(read_env_value "$env_file" RACKWATCH_SECRET_KEY)
+  if [[ -z "$secret" || "$secret" == change-me-* ]]; then
+    set_env_value "$env_file" RACKWATCH_SECRET_KEY "$(random_hex)"
+  fi
+
+  token=$(read_env_value "$env_file" RACKWATCH_API_TOKEN)
+  if [[ -z "$token" || "$token" == change-me-* ]]; then
+    token=$(random_hex)
+    set_env_value "$env_file" RACKWATCH_API_TOKEN "$token"
+  fi
+
+  set_env_value "$env_file" RACKWATCH_PUBLIC_URL "$DEFAULT_URL"
+  set_env_value "$env_file" GRAFANA_PUBLIC_URL "http://127.0.0.1:3001"
+  TOKEN="$token"
+}
+
+wait_for_rackwatch() {
+  local url="$1" attempt
+  for (( attempt = 1; attempt <= 60; attempt++ )); do
+    if curl --silent --fail --max-time 2 --proto '=http,https' --url "$url/healthz" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+port_is_listening() {
+  local port="$1" address
+  command -v ss >/dev/null 2>&1 || return 1
+  while IFS= read -r address; do
+    [[ "$address" =~ :${port}$ ]] && return 0
+  done < <(ss -H -ltn 2>/dev/null | awk '{print $4}')
+  return 1
+}
+
+inspect_local_stack() {
+  local compose=(docker compose --file "$INSTALL_DIR/docker-compose.yml" --project-directory "$INSTALL_DIR")
+  local services port
+  services=$("${compose[@]}" ps --services --status running 2>/dev/null || true)
+  if [[ -n "$services" ]]; then
+    info "Existing RackWatch services:"
+    "${compose[@]}" ps
+    return 0
+  fi
+
+  for port in 8080 3001 9090 9100 8081; do
+    port_is_listening "$port" \
+      && die "TCP port $port is already in use; resolve the conflict before installing"
+  done
+}
+
+verify_snapshot() {
+  local url="$1" token="$2" result
+  result=$(printf '%s\n' "$token" | "$COLLECTOR" snapshot "$url") || {
+    jq -r '"Connection failed: " + (.error // "unknown error") + (if .detail then " — " + .detail else "" end)' \
+      <<<"$result" >&2 2>/dev/null || true
+    return 1
+  }
+  jq -e '.ok == true and (.data | type == "object")' <<<"$result" >/dev/null
+}
+
+configure_widget() {
+  local url="$1" token="$2" config_dir tmp token_file count
+  [[ -f "$SHELL_CONFIG" ]] || die "Omarchy shell config not found: $SHELL_CONFIG"
+  config_dir=$(dirname -- "$SHELL_CONFIG")
+  count=$(jq --arg id "$PLUGIN_ID" '
+    [.bar.layout.left[], .bar.layout.center[], .bar.layout.right[]]
+    | map(select((if type == "object" then .id else . end) == $id)) | length
+  ' "$SHELL_CONFIG") || die "invalid Omarchy shell configuration"
+  [[ "$count" == 1 ]] || die "$PLUGIN_ID must be enabled exactly once before setup"
+
+  tmp=$(mktemp "$config_dir/.shell.json.tmp.XXXXXX") || die "cannot create shell config temporary file"
+  token_file=$(make_runtime_temp rackwatch-setup-token) \
+    || die "cannot create token temporary file"
+  TEMP_FILES+=("$tmp" "$token_file")
+  chmod 600 "$tmp" "$token_file"
+  printf '%s' "$token" >"$token_file"
+
+  jq -S -e --arg id "$PLUGIN_ID" --arg url "$url" --rawfile token "$token_file" '
+    def widget_id: if type == "object" then (.id // "") else . end;
+    def configured:
+      if widget_id == $id then
+        (if type == "object" then . else {id: .} end)
+        | .url = $url | .token = $token
+      else . end;
+    .bar.layout.left |= map(configured)
+    | .bar.layout.center |= map(configured)
+    | .bar.layout.right |= map(configured)
+  ' "$SHELL_CONFIG" >"$tmp" || die "could not update Omarchy configuration"
+  mv -- "$tmp" "$SHELL_CONFIG"
+  chmod 600 "$SHELL_CONFIG"
+  rm -f -- "$token_file"
+
+  if command -v omarchy-shell >/dev/null 2>&1; then
+    omarchy-shell shell reloadConfig >/dev/null 2>&1 \
+      || omarchy-shell -q shell rescanPlugins >/dev/null 2>&1 \
+      || true
+  fi
+}
+
+connect_existing() {
+  local url
+  need_command curl
+  need_command jq
+  [[ -x "$COLLECTOR" ]] || die "collector not found or not executable: $COLLECTOR"
+
+  url="${CONNECT_URL:-}"
+  if [[ -z "$url" && -t 0 ]]; then
+    read -r -p "RackWatch URL [$DEFAULT_URL]: " url
+  fi
+  url=$(normalize_url "${url:-$DEFAULT_URL}")
+  validate_url "$url" || die "invalid URL; use a base URL such as https://server.example"
+  read_token
+  token_transport_allowed "$url" "$TOKEN" \
+    || die "refusing to send a token over remote HTTP; use HTTPS, a VPN tunnel, or loopback"
+  verify_snapshot "$url" "$TOKEN" || die "RackWatch API validation failed; configuration was not changed"
+  configure_widget "$url" "$TOKEN"
+  info "RackWatch is connected at $url. The token was stored without printing it."
+}
+
+install_local() {
+  need_command curl
+  need_command docker
+  need_command jq
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
+  docker info >/dev/null 2>&1 || die "Docker is not running or your user cannot access it"
+  confirm_local_install || die "cancelled"
+
+  prepare_local_checkout
+  prepare_local_env
+  inspect_local_stack
+  info "Starting RackWatch with Docker Compose..."
+  docker compose --file "$INSTALL_DIR/docker-compose.yml" --project-directory "$INSTALL_DIR" up -d --build
+  wait_for_rackwatch "$DEFAULT_URL" \
+    || die "RackWatch did not become healthy in 60 seconds; inspect: docker compose --file '$INSTALL_DIR/docker-compose.yml' --project-directory '$INSTALL_DIR' ps"
+  verify_snapshot "$DEFAULT_URL" "$TOKEN" || die "RackWatch started but its API validation failed"
+  configure_widget "$DEFAULT_URL" "$TOKEN"
+  info "RackWatch and the Omarchy widget are ready at $DEFAULT_URL."
+}
+
+choose_mode() {
+  [[ -t 0 ]] || die "choose --connect URL or --install-local"
+  cat <<'EOF'
+How do you want to use RackWatch?
+  1) Connect CasaOS or another existing server (recommended)
+  2) Install RackWatch locally with Docker
+EOF
+  local choice
+  read -r -p "Choice [1]: " choice
+  case "${choice:-1}" in
+    1) MODE="connect" ;;
+    2) MODE="local" ;;
+    *) die "invalid choice" ;;
+  esac
+}
+
+main() {
+  trap cleanup EXIT HUP INT TERM
+  while (( $# > 0 )); do
+    case "$1" in
+      --connect)
+        [[ -z "$MODE" ]] || die "choose only one setup mode"
+        MODE="connect"
+        CONNECT_URL="${2:-}"
+        [[ -n "$CONNECT_URL" ]] || die "--connect requires a URL"
+        shift 2
+        ;;
+      --install-local)
+        [[ -z "$MODE" ]] || die "choose only one setup mode"
+        MODE="local"
+        shift
+        ;;
+      --install-dir)
+        INSTALL_DIR="${2:-}"
+        [[ -n "$INSTALL_DIR" ]] || die "--install-dir requires a path"
+        shift 2
+        ;;
+      --token-stdin)
+        TOKEN_FROM_STDIN=1
+        shift
+        ;;
+      --yes|-y)
+        ASSUME_YES=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *) die "unknown option: $1" ;;
+    esac
+  done
+
+  need_command jq
+  [[ -n "$MODE" ]] || choose_mode
+  case "$MODE" in
+    connect) connect_existing ;;
+    local) install_local ;;
+    *) die "invalid setup mode" ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

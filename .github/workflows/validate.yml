@@ -2,7 +2,7 @@ name: Validate plugin
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "feat/**"]
   pull_request:
 
 permissions:
@@ -17,14 +17,18 @@ jobs:
         run: |
           jq -e '.schemaVersion == 1 and .id == "nezbit.rackwatch" and (.kinds | index("bar-widget")) != null' manifest.json
           jq -e '.entryPoints.barWidget == "Panel.qml"' manifest.json
-          bash -n collector.sh tests/test-collector.sh tests/fixtures/bin/curl
+          bash -n collector.sh setup-rackwatch tests/test-collector.sh tests/test-setup.sh tests/fixtures/bin/curl
           test -x collector.sh
+          test -x setup-rackwatch
           test -x tests/test-collector.sh
+          test -x tests/test-setup.sh
           test -x tests/fixtures/bin/curl
       - name: Test collector
         run: ./tests/test-collector.sh
       - name: Test model
         run: node tests/test-model.js
+      - name: Test setup assistant
+        run: ./tests/test-setup.sh
       - name: Reject symlinks and embedded personal data
         run: |
           test -z "$(find . -path ./.git -prune -o -type l -print -quit)"

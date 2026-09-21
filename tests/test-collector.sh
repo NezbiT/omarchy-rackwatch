@@ -46,6 +46,18 @@ check_remote_http_token_rejected() {
   fi
 }
 
+check_valid_url() {
+  local url="$1" label="$2" output status
+  output=$(printf '\n' | PATH="$FAKE_BIN:$PATH" "$COLLECTOR" snapshot "$url" 2>&1)
+  status=$?
+  if (( status != 0 )) || ! jq -e '.ok == true' <<<"$output" >/dev/null 2>&1; then
+    printf 'FAIL: %s (status=%s output=%s)\n' "$label" "$status" "$output" >&2
+    failures=$((failures + 1))
+  else
+    printf 'PASS: %s\n' "$label"
+  fi
+}
+
 check_success() {
   local output status mutation_output mutation_status
   output=$(printf 'test-token\n' | PATH="$FAKE_BIN:$PATH" EXPECT_TOKEN='test-token' \
@@ -73,6 +85,11 @@ bash -n "$COLLECTOR" || failures=$((failures + 1))
 check_failure 'rejects unsupported URL schemes' snapshot 'file:///etc/passwd'
 check_failure 'rejects URL query strings' snapshot 'https://example.com/rackwatch?debug=1'
 check_failure 'rejects URL fragments' snapshot 'https://example.com/rackwatch#top'
+check_failure 'rejects embedded URL credentials' snapshot 'https://user:pass@example.com'
+check_failure 'rejects invalid URL ports' snapshot 'https://example.com:70000'
+check_failure 'rejects oversized URL ports' snapshot 'https://example.com:999999999999999999999'
+check_failure 'rejects URL backslashes' snapshot 'https://example.com\@evil.test'
+check_failure 'rejects URL control whitespace' snapshot $'https://example.com/path\tvalue'
 check_failure 'rejects invalid container names' restart-container 'http://127.0.0.1:9' '../bad'
 check_failure 'unknown actions return valid JSON' invalid-action 'http://127.0.0.1:9'
 check_failure 'network failures are not reported as success' restart-container 'http://127.0.0.1:9' demo
@@ -81,6 +98,8 @@ check_loopback_token 'http://127.0.0.1/rackwatch'
 check_loopback_token 'http://[::1]/rackwatch'
 check_remote_http_token_rejected 'http://localhost.evil/rackwatch'
 check_remote_http_token_rejected 'http://rackwatch.example/rackwatch'
+check_valid_url 'http://rackwatch_service:8080' 'accepts Docker-style local aliases'
+check_valid_url 'https://rackwatch.internal.' 'accepts absolute FQDN with trailing dot'
 check_success
 
 if (( failures > 0 )); then
