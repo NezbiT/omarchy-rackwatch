@@ -1,0 +1,31 @@
+name: Validate plugin
+
+on:
+  push:
+    branches: [main, "fix/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifest and scripts
+        run: |
+          jq -e '.schemaVersion == 1 and .id == "nezbit.rackwatch" and (.kinds | index("bar-widget")) != null' manifest.json
+          jq -e '.entryPoints.barWidget == "Panel.qml"' manifest.json
+          bash -n collector.sh tests/test-collector.sh tests/fixtures/bin/curl
+          test -x collector.sh
+          test -x tests/test-collector.sh
+          test -x tests/fixtures/bin/curl
+      - name: Test collector
+        run: ./tests/test-collector.sh
+      - name: Test model
+        run: node tests/test-model.js
+      - name: Reject symlinks and embedded personal data
+        run: |
+          test -z "$(find . -path ./.git -prune -o -type l -print -quit)"
+          ! grep -RIE --exclude-dir=.git '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' .

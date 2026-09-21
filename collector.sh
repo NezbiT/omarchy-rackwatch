@@ -55,8 +55,10 @@ if [[ "$ACTION" != "open-url" ]]; then
 fi
 
 if [[ -n "$TOKEN" && "$URL" == http://* ]]; then
-  case "$URL" in
-    http://127.0.0.1:*|http://127.0.0.1|http://localhost:*|http://localhost|http://\[::1\]:*|http://\[::1\]) ;;
+  AUTHORITY="${URL#http://}"
+  AUTHORITY="${AUTHORITY%%/*}"
+  case "${AUTHORITY,,}" in
+    127.0.0.1|127.0.0.1:*|localhost|localhost:*|\[::1\]|\[::1\]:*) ;;
     *) fail "Refusing to send API token over plain HTTP" "Use HTTPS or a loopback URL" 2 ;;
   esac
 fi
