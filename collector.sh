@@ -42,6 +42,10 @@ case "$URL" in
 esac
 [[ "$URL" != *$'\n'* && "$URL" != *$'\r'* && "$URL" != *' '* ]] \
   || fail "Invalid RackWatch URL" "Whitespace is not allowed" 2
+[[ "$URL" != *'?'* && "$URL" != *'#'* ]] \
+  || fail "Invalid RackWatch URL" "Query strings and fragments are not allowed" 2
+[[ "$URL" =~ ^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(:[0-9]+)?(/[^?#]*)?$ ]] \
+  || fail "Invalid RackWatch URL" "Use a base URL like http://host:8080 or https://host/rackwatch" 2
 
 if [[ "$ACTION" != "open-url" ]]; then
   # Quickshell writes the token through stdin so it never appears in argv.
@@ -51,8 +55,10 @@ if [[ "$ACTION" != "open-url" ]]; then
 fi
 
 if [[ -n "$TOKEN" && "$URL" == http://* ]]; then
-  case "$URL" in
-    http://127.0.0.1:*|http://127.0.0.1|http://localhost:*|http://localhost|http://\[::1\]:*|http://\[::1\]) ;;
+  AUTHORITY="${URL#http://}"
+  AUTHORITY="${AUTHORITY%%/*}"
+  case "${AUTHORITY,,}" in
+    127.0.0.1|127.0.0.1:*|localhost|localhost:*|\[::1\]|\[::1\]:*) ;;
     *) fail "Refusing to send API token over plain HTTP" "Use HTTPS or a loopback URL" 2 ;;
   esac
 fi
