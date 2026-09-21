@@ -108,6 +108,23 @@ omarchy plugin update nezbit.rackwatch --yes && \
 
 The assistant uses `git pull --ff-only`; it stops when local changes are present and preserves the existing `.env`, secrets, and Docker volumes.
 
+### Removal
+
+Remove the Omarchy widget with:
+
+```bash
+omarchy plugin remove nezbit.rackwatch --yes
+```
+
+This does not stop or delete the RackWatch server, its `.env`, database, or Docker volumes. If the assistant installed RackWatch locally and you also want to stop it without deleting data:
+
+```bash
+docker compose --file ~/.local/share/rackwatch/docker-compose.yml \
+  --project-directory ~/.local/share/rackwatch down
+```
+
+Do not add `--volumes` unless you intend to permanently delete Docker-managed data.
+
 ---
 
 ## Configuration
