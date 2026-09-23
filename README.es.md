@@ -59,7 +59,7 @@ omarchy plugin add https://github.com/NezbiT/omarchy-rackwatch.git --enable && \
 El asistente ofrece dos caminos:
 
 1. **Conectar CasaOS u otro servidor existente.** Solicita la URL y el token de forma oculta, valida `/api/v1/snapshot` y solo entonces guarda la configuración.
-2. **Instalar RackWatch localmente.** Comprueba Docker, clona RackWatch en `~/.local/share/rackwatch`, genera secretos aleatorios, levanta Docker Compose, espera el `healthcheck` y conecta el widget.
+2. **Instalar RackWatch localmente.** Comprueba Docker, hace checkout del commit revisado de RackWatch en `~/.local/share/rackwatch`, genera secretos aleatorios, levanta Docker Compose solo cuando ese checkout coincide con el pin, espera el `healthcheck` y conecta el widget.
 
 El token nunca se imprime ni se pasa como argumento de proceso. Si la validación falla, `shell.json` no se modifica.
 
@@ -113,7 +113,7 @@ omarchy plugin update nezbit.rackwatch --yes && \
 ~/.config/omarchy/plugins/nezbit.rackwatch/setup-rackwatch --install-local --yes
 ```
 
-El asistente usa `git pull --ff-only`; se detiene si detecta cambios locales y conserva `.env`, los secretos y los volúmenes Docker existentes.
+El asistente hace checkout del commit fijado en `setup-rackwatch` y no construye nada salvo que esa revisión exacta esté detached y limpia. Se detiene si detecta cambios locales y conserva `.env`, los secretos y los volúmenes Docker existentes. Una versión más nueva de RackWatch solo se instala publicando otro commit fijado en este plugin.
 
 ### Desinstalación
 

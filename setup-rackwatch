@@ -3,6 +3,8 @@ set -euo pipefail
 
 PLUGIN_ID="nezbit.rackwatch"
 RACKWATCH_REPOSITORY="https://github.com/NezbiT/rackwatch.git"
+# Reviewed immutable revision. Do not replace this with a branch name.
+RACKWATCH_COMMIT="e9858730f5f9e86269ae2b685cbf7a2d22c385b5"
 DEFAULT_URL="http://127.0.0.1:8080"
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/rackwatch"
 SHELL_CONFIG="${RACKWATCH_SHELL_CONFIG:-$HOME/.config/omarchy/shell.json}"
@@ -17,7 +19,7 @@ TEMP_FILES=()
 cleanup() {
   local path
   for path in "${TEMP_FILES[@]}"; do
-    [[ -n "$path" ]] && rm -f -- "$path"
+    [[ -n "$path" ]] && rm -rf -- "$path"
   done
 }
 
@@ -44,6 +46,8 @@ Options:
   -h, --help          Show this help
 
 Tokens are never passed as command-line arguments or printed.
+A local install checks out the reviewed RackWatch commit and builds it
+only after HEAD is exactly that detached revision.
 EOF
 }
 
@@ -150,22 +154,84 @@ read_env_value() {
   sed -n "s/^${key}=//p" "$file" | head -n 1
 }
 
+pinned_commit_ok() {
+  [[ "$1" =~ ^[0-9a-f]{40}$ ]]
+}
+
+require_pinned_commit() {
+  pinned_commit_ok "$RACKWATCH_COMMIT" \
+    || die "RackWatch source must be pinned to a full 40-character commit SHA"
+}
+
+assert_expected_origin() {
+  local origin
+  origin=$(git -C "$1" remote get-url origin 2>/dev/null || true)
+  [[ "$origin" == "$RACKWATCH_REPOSITORY" || "$origin" == "${RACKWATCH_REPOSITORY%.git}" ]] \
+    || die "$1 belongs to a different repository"
+}
+
+fetch_pinned_revision() {
+  local dir="$1" fetched
+  git -C "$dir" fetch --quiet --depth 1 origin "$RACKWATCH_COMMIT" \
+    || die "cannot fetch pinned RackWatch revision $RACKWATCH_COMMIT"
+  fetched=$(git -C "$dir" rev-parse --verify 'FETCH_HEAD^{commit}') \
+    || die "pinned fetch did not return a commit"
+  [[ "$fetched" == "$RACKWATCH_COMMIT" ]] \
+    || die "fetched $fetched instead of pinned revision $RACKWATCH_COMMIT"
+}
+
+detach_pinned_revision() {
+  local dir="$1"
+  git -C "$dir" checkout --quiet --detach "$RACKWATCH_COMMIT" \
+    || die "cannot check out pinned RackWatch revision $RACKWATCH_COMMIT"
+}
+
+verify_pinned_checkout() {
+  local head branch
+  require_pinned_commit
+  [[ -d "$INSTALL_DIR/.git" || -f "$INSTALL_DIR/.git" ]] \
+    || die "RackWatch checkout is missing"
+  head=$(git -C "$INSTALL_DIR" rev-parse --verify 'HEAD^{commit}') \
+    || die "cannot read RackWatch checkout"
+  [[ "$head" == "$RACKWATCH_COMMIT" ]] \
+    || die "RackWatch checkout $head is not pinned revision $RACKWATCH_COMMIT"
+  branch=$(git -C "$INSTALL_DIR" rev-parse --abbrev-ref HEAD) \
+    || die "cannot read RackWatch branch state"
+  [[ "$branch" == "HEAD" ]] \
+    || die "RackWatch checkout must be detached at the pinned revision"
+  [[ -z "$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=all)" ]] \
+    || die "RackWatch checkout has local changes; refusing to build it"
+}
+
 prepare_local_checkout() {
+  local stage published
   need_command git
+  require_pinned_commit
   if [[ ! -e "$INSTALL_DIR" ]]; then
     mkdir -p -- "$(dirname -- "$INSTALL_DIR")"
-    git clone --depth 1 -- "$RACKWATCH_REPOSITORY" "$INSTALL_DIR"
+    stage=$(mktemp -d "${TMPDIR:-/tmp}/rackwatch-checkout.XXXXXX")
+    TEMP_FILES+=("$stage")
+    git init --quiet -- "$stage"
+    git -C "$stage" remote add origin "$RACKWATCH_REPOSITORY"
+    fetch_pinned_revision "$stage"
+    detach_pinned_revision "$stage"
+    published="$INSTALL_DIR"
+    INSTALL_DIR="$stage"
+    verify_pinned_checkout
+    INSTALL_DIR="$published"
+    mv -- "$stage" "$INSTALL_DIR"
+    verify_pinned_checkout
     return
   fi
 
-  [[ -d "$INSTALL_DIR/.git" ]] || die "$INSTALL_DIR exists but is not a Git checkout"
-  local origin
-  origin=$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)
-  [[ "$origin" == "$RACKWATCH_REPOSITORY" || "$origin" == "${RACKWATCH_REPOSITORY%.git}" ]] \
-    || die "$INSTALL_DIR belongs to a different repository"
-  [[ -z "$(git -C "$INSTALL_DIR" status --porcelain)" ]] \
+  [[ -d "$INSTALL_DIR/.git" || -f "$INSTALL_DIR/.git" ]] \
+    || die "$INSTALL_DIR exists but is not a Git checkout"
+  assert_expected_origin "$INSTALL_DIR"
+  [[ -z "$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=all)" ]] \
     || die "$INSTALL_DIR has local changes; refusing to overwrite them"
-  git -C "$INSTALL_DIR" pull --ff-only
+  fetch_pinned_revision "$INSTALL_DIR"
+  detach_pinned_revision "$INSTALL_DIR"
+  verify_pinned_checkout
 }
 
 prepare_local_env() {
@@ -307,6 +373,7 @@ install_local() {
   prepare_local_checkout
   prepare_local_env
   inspect_local_stack
+  verify_pinned_checkout
   info "Starting RackWatch with Docker Compose..."
   docker compose --file "$INSTALL_DIR/docker-compose.yml" --project-directory "$INSTALL_DIR" up -d --build
   wait_for_rackwatch "$DEFAULT_URL" \
