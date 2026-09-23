@@ -121,6 +121,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         visible: !(bar ? bar.vertical : false)
         anchors.verticalCenter: parent.verticalCenter
         text: root.barText
@@ -183,6 +184,7 @@ Panel {
             width: parent.width
 
             Text {
+              textFormat: Text.PlainText
               text: "Updated " + (service.lastUpdated.getTime() > 0 ? Qt.formatTime(service.lastUpdated, "HH:mm:ss") : "never") + " · " + (service.refreshing ? "Refreshing…" : "R to refresh")
               color: root.dim
               font.family: root.fontFamily
@@ -198,6 +200,7 @@ Panel {
               color: linkMouse.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
 
               Text {
+                textFormat: Text.PlainText
                 id: linkText
                 anchors.centerIn: parent
                 text: "Open Web UI ↗"
@@ -261,6 +264,7 @@ Panel {
             border.width: 1
 
             Text {
+              textFormat: Text.PlainText
               id: actionMessage
               anchors.fill: parent
               anchors.margins: Style.space(8)
@@ -289,6 +293,7 @@ Panel {
               spacing: Style.space(4)
 
               Text {
+                textFormat: Text.PlainText
                 text: "Cannot connect to RackWatch"
                 color: root.urgent
                 font.family: root.fontFamily
@@ -297,6 +302,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: "URL: " + service.url + "\nError: " + (service.lastError || "Connection refused") + "\nCheck if RackWatch server is running or configure URL in settings."
                 color: root.foreground
@@ -364,6 +370,7 @@ Panel {
                   anchors.rightMargin: Style.space(10)
 
                   Text {
+                    textFormat: Text.PlainText
                     text: "ZFS: " + modelData.name
                     color: root.foreground
                     font.family: root.fontFamily
@@ -374,6 +381,7 @@ Panel {
                   Item { Layout.fillWidth: true }
 
                   Text {
+                    textFormat: Text.PlainText
                     text: modelData.health
                     color: modelData.health === "ONLINE" ? root.colorOk : root.urgent
                     font.family: root.fontFamily
@@ -382,6 +390,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     text: Model.formatPercent(modelData.capacity_percent) + " full"
                     color: root.dim
                     font.family: root.fontFamily
@@ -475,12 +484,14 @@ Panel {
       spacing: Style.space(4)
 
       Text {
+        textFormat: Text.PlainText
         text: isOk ? "●" : "○"
         color: isOk ? root.colorOk : root.urgent
         font.pixelSize: Style.font.caption
       }
 
       Text {
+        textFormat: Text.PlainText
         text: label
         color: root.foreground
         font.family: root.fontFamily
@@ -508,6 +519,7 @@ Panel {
       RowLayout {
         width: parent.width
         Text {
+          textFormat: Text.PlainText
           text: title
           color: root.dim
           font.family: root.fontFamily
@@ -516,6 +528,7 @@ Panel {
         }
         Item { Layout.fillWidth: true }
         Text {
+          textFormat: Text.PlainText
           text: Model.formatPercent(percent)
           color: percent >= 90 ? root.urgent : (percent >= 80 ? root.colorWarn : root.foreground)
           font.family: root.fontFamily
@@ -540,6 +553,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: detail
         color: root.dim
         font.family: root.fontFamily
@@ -582,6 +596,7 @@ Panel {
         spacing: Style.space(2)
 
         Text {
+          textFormat: Text.PlainText
           text: container ? container.name : ""
           color: root.foreground
           font.family: root.fontFamily
@@ -591,6 +606,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           text: (container ? container.image : "") + (container && container.memory_bytes ? (" · " + Model.formatBytes(container.memory_bytes)) : "")
           color: root.dim
           font.family: root.fontFamily
@@ -607,6 +623,7 @@ Panel {
         color: restartMouse.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
 
         Text {
+          textFormat: Text.PlainText
           anchors.centerIn: parent
           text: "󰑓"
           color: restartMouse.containsMouse ? root.colorOk : root.foreground
@@ -643,6 +660,7 @@ Panel {
         spacing: Style.space(2)
 
         Text {
+          textFormat: Text.PlainText
           text: alertItem ? alertItem.title : ""
           color: root.urgent
           font.family: root.fontFamily
@@ -652,6 +670,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           text: (alertItem ? alertItem.message : "") + " · " + Model.timeAgo(alertItem ? alertItem.created_at : null)
           color: root.foreground
           font.family: root.fontFamily
@@ -668,6 +687,7 @@ Panel {
         color: ackMouse.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.2) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
 
         Text {
+          textFormat: Text.PlainText
           id: ackText
           anchors.centerIn: parent
           text: "Ack"
