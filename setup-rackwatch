@@ -4,7 +4,7 @@ set -euo pipefail
 PLUGIN_ID="nezbit.rackwatch"
 RACKWATCH_REPOSITORY="https://github.com/NezbiT/rackwatch.git"
 # Reviewed immutable revision. Do not replace this with a branch name.
-RACKWATCH_COMMIT="e9858730f5f9e86269ae2b685cbf7a2d22c385b5"
+RACKWATCH_COMMIT="79a4fe73a12cdd4f23b7456e98b967df6da0fd98"
 DEFAULT_URL="http://127.0.0.1:8080"
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/rackwatch"
 SHELL_CONFIG="${RACKWATCH_SHELL_CONFIG:-$HOME/.config/omarchy/shell.json}"
